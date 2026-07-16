@@ -1,37 +1,43 @@
-# Apollo Deploy
+# Apollo Deployment API
 
 **Repository:** [github.com/Apollo-Deploy/Apollo-Deployment-API](https://github.com/Apollo-Deploy/Apollo-Deployment-API)
 
-Apollo Deploy is an API-first application deployment platform inspired by platforms such as Fly.io and Vercel.
+Apollo Deploy is an API-first application deployment platform inspired by Fly.io and Vercel.
 
 The initial MVP focuses on one reliable workflow:
 
 > Build a Dockerfile application, deploy it to a single region, expose it over HTTPS, stream logs, scale replicas, and roll back safely.
 
-The platform uses:
+---
 
-- **Kotlin and Ktor** for the control plane and business logic.
-- **Zig** for host-level agents and build execution.
-- **Kubernetes and containerd** as the initial workload runtime.
-- **BuildKit** for OCI image builds.
-- **Temporal** for durable deployment workflows.
-- **NATS JetStream** for commands and asynchronous events.
-- **PostgreSQL** for platform state.
-- **S3-compatible object storage** for source archives and artifacts.
-- **An OCI registry** for application images.
+## Tech stack
+
+| Layer | Technology | Role |
+|-------|-----------|------|
+| Control plane | Kotlin + Ktor | Platform intent, business rules, APIs |
+| Systems plane | Zig | Host-level agents, build execution |
+| Workload runtime | Kubernetes + containerd | Container scheduling and lifecycle |
+| Build system | BuildKit | OCI image builds |
+| Workflow engine | Temporal | Durable deployment workflows |
+| Messaging | NATS JetStream | Commands and async events |
+| Database | PostgreSQL | Platform state |
+| Artifact storage | S3-compatible | Source archives, build artifacts |
+| Image registry | OCI registry | Application images |
+
+---
 
 ## MVP goal
 
-A developer should be able to run:
+A developer runs:
 
 ```bash
 apollo login
 apollo apps create example-api
-apollo secrets set DATABASE_URL=...
+apollo secrets set DATABASE_URL=postgres://...
 apollo deploy
 ```
 
-And receive:
+And receives:
 
 ```text
 ✓ Source uploaded
@@ -44,92 +50,94 @@ And receive:
 https://example-api.apollo.run
 ```
 
-The following must also work:
+Day-two operations also work out of the box:
 
 ```bash
 apollo logs --follow
 apollo scale --replicas 3
-apollo deploy
+apollo deploy        # zero-downtime re-deploy
 apollo rollback
 ```
 
-## Architecture principle
+---
 
-Apollo Deploy is separated into two primary planes:
+## Architecture
 
-### Kotlin control plane
+Apollo Deploy is split into two planes with a strict boundary.
+
+### Control plane (Kotlin)
 
 Kotlin owns platform intent and business rules:
 
-- APIs
-- authentication and authorization
-- organizations and projects
-- applications and services
-- builds and releases
-- deployment workflows
-- scheduling policy
+- REST and gRPC APIs
+- Authentication and authorization
+- Organizations and projects
+- Applications and services
+- Builds and releases
+- Deployment workflow orchestration
+- Scheduling policy
 - Kubernetes reconciliation
-- domains and certificates
-- usage aggregation
-- billing enforcement
-- auditing
+- Domains and certificates
+- Usage aggregation
+- Billing enforcement
+- Audit logging
 
-### Zig systems plane
+### Systems plane (Zig)
 
 Zig owns machine-level execution:
 
-- build supervision
-- workspace lifecycle
+- Build supervision
+- Workspace lifecycle
 - BuildKit process management
-- build cancellation and timeouts
-- node registration
-- host health and capacity
-- local event buffering
-- system telemetry
+- Build cancellation and timeouts
+- Node registration
+- Host health and capacity reporting
+- Local event buffering
+- System telemetry
 
-The core rule is:
+**Core rule:** Kotlin decides what should exist. Zig safely performs host-level work and reports what actually happened.
 
-> Kotlin decides what should exist. Zig safely performs host-level work and reports what actually happened.
+---
 
 ## Repository layout
 
 ```text
-apollo-deploy/
+apollo-deployment-api/
 ├── apps/
-│   ├── platform-api/
-│   ├── deployment-worker/
-│   ├── build-coordinator/
-│   ├── runtime-reconciler/
-│   ├── usage-aggregator/
-│   ├── admin-api/
-│   ├── dashboard/
-│   └── cli/
+│   ├── platform-api/          # Core control-plane API
+│   ├── deployment-worker/     # Temporal worker for deployment workflows
+│   ├── build-coordinator/     # Manages build queues and nodes
+│   ├── runtime-reconciler/    # Kubernetes state reconciliation
+│   ├── usage-aggregator/      # Collects and rolls up usage metrics
+│   ├── admin-api/             # Internal ops API
+│   ├── dashboard/             # Web UI
+│   └── cli/                   # apollo CLI
 │
 ├── kotlin/
-│   ├── domain/
-│   ├── persistence/
-│   ├── temporal/
-│   ├── messaging/
-│   ├── kubernetes/
-│   ├── security/
-│   └── observability/
+│   ├── domain/                # Core domain models and logic
+│   ├── persistence/           # Database access layer
+│   ├── temporal/              # Workflow and activity definitions
+│   ├── messaging/             # NATS publishers and consumers
+│   ├── kubernetes/            # K8s client and reconcilers
+│   ├── security/              # Auth, JWT, RBAC
+│   └── observability/         # Metrics, tracing, structured logging
 │
 ├── zig/
-│   ├── build-executor/
-│   ├── host-agent/
-│   └── common/
+│   ├── build-executor/        # BuildKit supervision and execution
+│   ├── host-agent/            # Node registration and health reporting
+│   └── common/                # Shared Zig utilities
 │
 ├── schemas/
-│   ├── protobuf/
-│   ├── openapi/
-│   ├── events/
-│   └── fixtures/
+│   ├── protobuf/              # Service-to-service contracts
+│   ├── openapi/               # Public API specs
+│   ├── events/                # NATS event schemas
+│   └── fixtures/              # Test data
 │
 ├── infrastructure/
-│   ├── terraform/
-│   ├── kubernetes/
-│   ├── local/
-│   └── monitoring/
+│   ├── terraform/             # Cloud provisioning
+│   ├── kubernetes/            # K8s manifests and Helm charts
+│   ├── local/                 # Local dev stack (Docker Compose / Task)
+│   └── monitoring/            # Grafana, Prometheus, alerting
 │
 ├── integration-tests/
 │   ├── deployment/
@@ -137,101 +145,100 @@ apollo-deploy/
 │   ├── domains/
 │   └── failure/
 │
-└── docs/
+└── docs/                      # Architecture and implementation docs
 ```
+
+---
 
 ## Documentation
 
-Start with the MVP scope, then follow the documents in implementation order.
+Follow these documents in implementation order:
 
-1. [MVP scope](docs/00-mvp-scope.md)
-2. [System architecture](docs/01-architecture.md)
-3. [Domain model](docs/02-domain-model.md)
-4. [Kotlin control plane](docs/03-kotlin-control-plane.md)
-5. [Zig systems components](docs/04-zig-systems-plane.md)
-6. [Build pipeline](docs/05-build-pipeline.md)
-7. [Runtime and deployments](docs/06-runtime-and-deployments.md)
-8. [Routing, domains, and TLS](docs/07-routing-domains-and-tls.md)
-9. [Observability, usage, and billing](docs/08-observability-usage-and-billing.md)
-10. [Security and isolation](docs/09-security-and-isolation.md)
-11. [Infrastructure](docs/10-infrastructure.md)
-12. [Implementation roadmap](docs/11-roadmap.md)
-13. [Protocols and events](docs/12-protocols-and-events.md)
-14. [Testing and reliability](docs/13-testing-and-reliability.md)
-15. [Definition of done](docs/14-definition-of-done.md)
+| # | Document |
+|---|----------|
+| 0 | [MVP scope](docs/00-mvp-scope.md) |
+| 1 | [System architecture](docs/01-architecture.md) |
+| 2 | [Domain model](docs/02-domain-model.md) |
+| 3 | [Kotlin control plane](docs/03-kotlin-control-plane.md) |
+| 4 | [Zig systems plane](docs/04-zig-systems-plane.md) |
+| 5 | [Build pipeline](docs/05-build-pipeline.md) |
+| 6 | [Runtime and deployments](docs/06-runtime-and-deployments.md) |
+| 7 | [Routing, domains, and TLS](docs/07-routing-domains-and-tls.md) |
+| 8 | [Observability, usage, and billing](docs/08-observability-usage-and-billing.md) |
+| 9 | [Security and isolation](docs/09-security-and-isolation.md) |
+| 10 | [Infrastructure](docs/10-infrastructure.md) |
+| 11 | [Implementation roadmap](docs/11-roadmap.md) |
+| 12 | [Protocols and events](docs/12-protocols-and-events.md) |
+| 13 | [Testing and reliability](docs/13-testing-and-reliability.md) |
+| 14 | [Definition of done](docs/14-definition-of-done.md) |
 
-## MVP boundaries
+---
 
-The MVP supports:
+## MVP scope
 
-- one region
-- Dockerfile deployments
-- one HTTP service per application
-- automatic platform domains
-- custom domains
-- automatic HTTPS
-- manual replica scaling
-- health checks
-- deployment and runtime logs
-- deployment history
-- rollbacks
-- basic usage limits
+### In scope
 
-The MVP does not include:
+- Single-region deployments
+- Dockerfile-based builds
+- One HTTP service per application
+- Automatic `*.apollo.run` domains
+- Custom domains with automatic HTTPS
+- Manual replica scaling
+- Health checks
+- Deployment and runtime log streaming
+- Deployment history and rollbacks
+- Basic usage limits
 
-- multi-region deployments
-- Firecracker
-- persistent volumes
-- managed databases
-- TCP or UDP services
-- scale to zero
-- autoscaling
-- GPUs
-- private tenant networks
-- custom eBPF networking
-- a custom edge proxy
-- global Anycast
-- buildpacks or Nixpacks
+### Out of scope (post-MVP)
+
+- Multi-region deployments
+- Firecracker microVMs
+- Persistent volumes
+- Managed databases
+- TCP/UDP services
+- Scale to zero / autoscaling
+- GPU support
+- Private tenant networks
+- Custom eBPF networking
+- Custom edge proxy
+- Global Anycast
+- Buildpacks or Nixpacks
+
+---
 
 ## Local development
 
-The local environment should start these dependencies:
-
-- PostgreSQL
-- Temporal
-- NATS JetStream
-- S3-compatible object storage
-- local OCI registry
-- local Kubernetes cluster
-
-The implementation should expose one documented command, such as:
+Start the full local stack with:
 
 ```bash
 make dev
 ```
 
-or:
+This brings up:
 
-```bash
-task dev
-```
+- PostgreSQL
+- Temporal (+ Temporal UI)
+- NATS JetStream
+- S3-compatible object storage (MinIO)
+- Local OCI registry
+- Local Kubernetes cluster (k3s or kind)
 
-## Initial release target
+---
 
-Apollo Deploy `v0.1` is ready for private beta when a new user can:
+## v0.1 private beta checklist
 
-1. Create an account and organization.
-2. Install and authenticate the CLI.
-3. Create an application.
-4. configure secrets.
-5. Deploy a Dockerfile.
-6. Watch build output.
-7. Access the application over HTTPS.
-8. View runtime logs.
-9. Scale replicas.
-10. deploy a second release without downtime.
-11. Roll back.
-12. Add a custom domain.
-13. View basic usage.
+`v0.1` ships when a new user can complete all of the following without touching the database or running kubectl:
 
-No step may require direct database edits or manual Kubernetes operations.
+- [ ] Create an account and organization
+- [ ] Install and authenticate the CLI
+- [ ] Create an application
+- [ ] Set secrets
+- [ ] Deploy a Dockerfile
+- [ ] Watch live build output
+- [ ] Access the application over HTTPS
+- [ ] View runtime logs
+- [ ] Scale replicas
+- [ ] Deploy a second release without downtime
+- [ ] Roll back to a previous release
+- [ ] Add a custom domain
+- [ ] View basic usage
